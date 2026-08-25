@@ -1,0 +1,79 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>untwitt</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <header class="hdr">
+      <h1>untwitt</h1>
+      <p class="tag">Bulk manage your following list.</p>
+    </header>
+
+    <section class="status-card" id="status-card">
+      <div class="state" id="state-pill">IDLE</div>
+      <div class="primary-counter">
+        <div class="big" id="unfollowed-big">0</div>
+        <div class="lbl">UNFOLLOWED</div>
+      </div>
+      <div class="secondary-line">
+        <span>Detected <strong id="detected">0</strong></span>
+        <span>Mode <strong id="mode-disp">All</strong></span>
+        <span>Speed <strong id="speed-disp">Normal</strong></span>
+        <span>Elapsed <strong id="elapsed">00:00</strong></span>
+      </div>
+    </section>
+
+    <section class="counters" id="counters">
+      <div><span class="lbl">Detected</span><span class="val" id="c-detected">0</span></div>
+      <div><span class="lbl">Queued</span><span class="val" id="c-queued">0</span></div>
+      <div><span class="lbl">Unfollowed</span><span class="val" id="c-unfollowed">0</span></div>
+      <div><span class="lbl">Failed</span><span class="val" id="c-failed">0</span></div>
+      <div><span class="lbl">Skipped</span><span class="val" id="c-skipped">0</span></div>
+    </section>
+
+    <div class="progress"><div class="bar" id="progress-bar"></div></div>
+
+    <section class="controls">
+      <button class="primary" id="primary-btn">UNFOLLOW ALL</button>
+      <button class="secondary" id="stop-btn" disabled>STOP</button>
+      <button class="secondary hidden" id="pause-btn">PAUSE</button>
+      <button class="secondary hidden" id="resume-btn">RESUME</button>
+      <button class="tertiary" id="reset-btn">RESET SESSION</button>
+    </section>
+
+    <section class="config">
+      <div class="row">
+        <label>Mode</label>
+        <select id="mode-sel">
+          <option value="all">All accounts</option>
+          <option value="batch">Batch</option>
+        </select>
+        <select id="batch-size-sel" class="hidden">
+          <option>10</option><option>25</option><option selected>50</option>
+          <option>100</option><option>250</option><option>500</option>
+        </select>
+      </div>
+      <div class="row">
+        <label>Speed</label>
+        <select id="speed-sel">
+          <option value="fast">Fast (500ms)</option>
+          <option value="normal" selected>Normal (1s)</option>
+          <option value="moderate">Moderate (2s)</option>
+          <option value="slow">Slow (5s)</option>
+          <option value="custom">Custom</option>
+        </select>
+        <input type="number" id="custom-delay" min="100" max="60000" value="1500" class="hidden"> ms
+      </div>
+    </section>
+
+    <footer class="ftr">
+      <span>v0.1.0</span>
+      <span class="dot" id="conn-dot">·</span>
+      <span id="conn-text">no active tab</span>
+    </footer>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "name": "untwitt",
+  "version": "0.1.0",
+  "description": "Bulk-unfollow utility for x.com",
+  "license": "SEE-LICENSE-FILE-IN-REPOSITORY",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node tests/run.js",
+    "lint:scope": "node tests/lint-scope.js"
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0"
+  }
+}
