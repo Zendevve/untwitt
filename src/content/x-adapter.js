@@ -113,16 +113,54 @@ function normalizeHandle(raw) {
   return s.toLowerCase();
 }
 
+function isSystemRoute(handle) {
+  if (!handle) return true;
+  const h = handle.toLowerCase();
+  const SYSTEM = new Set([
+    'home', 'explore', 'notifications', 'messages', 'i',
+    'search', 'settings', 'tos', 'privacy', 'rules',
+    'intent', 'share', 'logout', 'login', 'signup', 'following', 'followers'
+  ]);
+  return SYSTEM.has(h);
+}
+
+function extractHandleFromCell(cell) {
+  if (!cell || !(cell instanceof HTMLElement)) return '';
+
+  // 1. Check spans / text nodes inside the cell for explicit @handle
+  const spans = cell.querySelectorAll('span, div, a');
+  for (const s of spans) {
+    const txt = (s.textContent || '').trim();
+    if (txt.startsWith('@') && /^@[a-zA-Z0-9_]{1,30}$/.test(txt)) {
+      const norm = normalizeHandle(txt);
+      if (norm && !isSystemRoute(norm)) return norm;
+    }
+  }
+
+  // 2. Direct selector
+  const directLink = cell.querySelector(SELECTORS.userCellLink);
+  if (directLink) {
+    const h = readHandleFromHref(directLink.getAttribute('href') || '');
+    if (h && !isSystemRoute(h)) return h;
+  }
+
+  // 3. Fallback: all links in cell
+  const links = cell.querySelectorAll('a[href^="/"]');
+  for (const link of links) {
+    const h = readHandleFromHref(link.getAttribute('href') || '');
+    if (h && !isSystemRoute(h)) return h;
+  }
+
+  return '';
+}
+
 function readHandleFromHref(href) {
   if (typeof href !== 'string') return '';
-  // The href begins with "/" (guaranteed by the userCellLink selector), so
-  // the handle is the first non-empty path segment.
   const parts = href.split('/');
   if (parts.length < 2) return '';
   const first = parts[1] || '';
   return normalizeHandle(first);
 }
-
 function readDisplayNameFromCell(cell) {
   // X renders the display name as a dir="auto" span near the top of the
   // cell. The selector is intentionally narrow (only inside the cell) and
@@ -274,9 +312,7 @@ const XAdapter = {
    */
   getAccountIdentity(cell) {
     if (!(cell instanceof HTMLElement)) return null;
-    const link = cell.querySelector(SELECTORS.userCellLink);
-    if (!link) return null;
-    const handle = readHandleFromHref(link.getAttribute('href') || '');
+    const handle = extractHandleFromCell(cell);
     if (!handle) return null;
     const displayName = readDisplayNameFromCell(cell);
     return {
