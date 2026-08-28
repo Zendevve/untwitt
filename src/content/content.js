@@ -634,6 +634,27 @@ function handleSetBatchSize(payload) {
   emitStatus();
   persistSession();
 }
+function handleSetFilterConfig(payload) {
+  if (!payload || typeof payload !== 'object') return;
+  if (typeof payload.filterMode === 'string') session.filterMode = payload.filterMode;
+  if (typeof payload.protectMutuals === 'boolean') session.protectMutuals = payload.protectMutuals;
+  if (typeof payload.protectVerified === 'boolean') session.protectVerified = payload.protectVerified;
+  if (typeof payload.skipDefaultAvatars === 'boolean') session.skipDefaultAvatars = payload.skipDefaultAvatars;
+  if (Array.isArray(payload.bioKeywordsExclude)) session.bioKeywordsExclude = payload.bioKeywordsExclude;
+  emitStatus();
+  persistSession();
+}
+
+function handleSetWhitelist(payload) {
+  if (!payload || typeof payload !== 'object') return;
+  if (Array.isArray(payload.whitelist)) {
+    session.whitelist = payload.whitelist;
+    whitelist.clear();
+    for (const h of payload.whitelist) whitelist.add(h);
+  }
+  emitStatus();
+  persistSession();
+}
 
 const INBOUND_HANDLERS = Object.freeze({
   START: handleStart,
@@ -646,18 +667,44 @@ const INBOUND_HANDLERS = Object.freeze({
   SET_BATCH_SIZE: handleSetBatchSize,
 });
 
+const EXTENDED_HANDLERS = Object.freeze({
+  SET_FILTER_CONFIG: handleSetFilterConfig,
+  SET_WHITELIST: handleSetWhitelist,
+});
+
 function dispatchMessage(message, _sender, _sendResponse) {
-  if (!message || typeof message !== 'object' || typeof message.type !== 'string') return false;
-  const handler = INBOUND_HANDLERS[message.type];
-  if (typeof handler !== 'function') return false;
+  if (!message || typeof message !== 'object' || typeof message.type !== 'string') {
+    if (typeof _sendResponse === 'function') _sendResponse({ ok: false, error: 'invalid_message' });
+    return false;
+  }
+  if (message.type === 'PING') {
+    if (typeof _sendResponse === 'function') {
+      _sendResponse({
+        ok: true,
+        isFollowingPage: XAdapter.isFollowingPage(),
+        session: _snapshotSession(),
+      });
+    }
+    return false;
+  }
+  const handler = INBOUND_HANDLERS[message.type] || EXTENDED_HANDLERS[message.type];
+  if (typeof handler !== 'function') {
+    if (typeof _sendResponse === 'function') _sendResponse({ ok: false, error: 'no_handler' });
+    return false;
+  }
   try {
-    handler(message.payload);
+    const res = handler(message.payload);
+    if (typeof _sendResponse === 'function') {
+      _sendResponse({ ok: true, result: res, session: _snapshotSession() });
+    }
   } catch (err) {
     session.lastError = err && err.message ? err.message : String(err);
     emitError(session.lastError);
     emitStatus();
+    if (typeof _sendResponse === 'function') {
+      _sendResponse({ ok: false, error: session.lastError });
+    }
   }
-  // Return false so the messaging layer does not keep the channel open.
   return false;
 }
 

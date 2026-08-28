@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "untwitt",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Bulk-unfollow accounts on x.com with controlled pacing, batching, and transparent counters. Local-only — no backend, no analytics, no API credentials.",
   "permissions": ["storage", "tabs"],
   "host_permissions": ["https://x.com/*", "https://twitter.com/*"],
@@ -21,8 +21,8 @@
   "content_scripts": [
     {
       "matches": [
-        "https://x.com/*/following*",
-        "https://twitter.com/*/following*"
+        "https://x.com/*",
+        "https://twitter.com/*"
       ],
       "js": ["src/content/content.js"],
       "run_at": "document_idle"

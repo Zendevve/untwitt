@@ -80,6 +80,7 @@
   var lastSpeedSent = session.speedPreset;
   var lastCustomSent = session.customMs;
   var lastFilterSent = session.filterMode;
+  var isCurrentTabFollowingPage = false;
 
   function safeSend(msg, cb) {
     try {
@@ -90,6 +91,18 @@
     } catch (e) {
       if (typeof cb === "function") cb(e, null);
     }
+  }
+
+  function sendFilterConfig() {
+    safeSend({
+      type: "SET_FILTER_CONFIG",
+      payload: {
+        filterMode: session.filterMode,
+        protectMutuals: session.protectMutuals,
+        protectVerified: session.protectVerified,
+        skipDefaultAvatars: session.skipDefaultAvatars,
+      }
+    });
   }
 
   function fmtElapsed(ms) {
@@ -167,7 +180,6 @@
       els.primaryBtn.disabled = true;
       els.stopBtn.disabled = true;
     } else {
-      // IDLE / STOPPED / ERROR
       if (session.filterMode === "non_followers") {
         els.primaryBtn.textContent = "UNFOLLOW NON-FOLLOWERS";
       } else if (session.filterMode === "mutuals_only") {
@@ -207,6 +219,11 @@
     } else {
       if (els.customDelay) els.customDelay.classList.add("hidden");
     }
+
+    if (els.chkProtectMutuals) els.chkProtectMutuals.checked = !!session.protectMutuals;
+    if (els.chkProtectVerified) els.chkProtectVerified.checked = !!session.protectVerified;
+    if (els.chkJitter) els.chkJitter.checked = session.jitter !== false;
+    if (els.chkSkipAvatars) els.chkSkipAvatars.checked = !!session.skipDefaultAvatars;
 
     renderWhitelist();
   }
@@ -299,21 +316,30 @@
             chrome.tabs.sendMessage(t.id, { type: "PING" }, function (resp) {
               if (chrome.runtime.lastError || !resp) {
                 if (els.connDot) els.connDot.className = "dot error";
-                if (els.connText) els.connText.textContent = "tab not ready";
+                if (els.connText) els.connText.textContent = "tab not ready (refresh x.com)";
+                isCurrentTabFollowingPage = false;
               } else {
                 if (els.connDot) els.connDot.className = "dot connected";
-                if (els.connText) els.connText.textContent = "connected";
+                if (resp.isFollowingPage) {
+                  if (els.connText) els.connText.textContent = "connected (Following page)";
+                  isCurrentTabFollowingPage = true;
+                } else {
+                  if (els.connText) els.connText.textContent = "connected (navigate to /following)";
+                  isCurrentTabFollowingPage = false;
+                }
               }
             });
           } catch (e) {
             if (els.connDot) els.connDot.className = "dot error";
             if (els.connText) els.connText.textContent = "tab not ready";
+            isCurrentTabFollowingPage = false;
           }
         }
       });
     } catch (e) {
       if (els.connDot) els.connDot.className = "dot";
       if (els.connText) els.connText.textContent = "no active tab";
+      isCurrentTabFollowingPage = false;
     }
   }
 
@@ -352,6 +378,7 @@
     els.primaryBtn.addEventListener("click", function () {
       var st = (session.state || "IDLE").toUpperCase();
       if (st === "IDLE" || st === "DONE" || st === "STOPPED" || st === "ERROR") {
+        sendFilterConfig();
         if (session.mode !== lastModeSent) {
           safeSend({ type: "SET_MODE", payload: { mode: session.mode, batchSize: session.batchSize } });
           lastModeSent = session.mode;
@@ -367,7 +394,13 @@
           lastSpeedSent = session.speedPreset;
           lastCustomSent = session.customMs;
         }
-        safeSend({ type: "START" });
+        safeSend({ type: "START" }, function (err, resp) {
+          if (err || (resp && !resp.ok)) {
+            if (!isCurrentTabFollowingPage) {
+              alert("Please open your X Following page first:\nx.com/[your_username]/following");
+            }
+          }
+        });
       } else if (st === "RUNNING") {
         safeSend({ type: "PAUSE" });
       } else if (st === "PAUSED") {
@@ -395,7 +428,36 @@
       var f = els.filterSel.value;
       session.filterMode = f;
       lastFilterSent = f;
+      sendFilterConfig();
       render();
+    });
+  }
+
+  if (els.chkProtectMutuals) {
+    els.chkProtectMutuals.addEventListener("change", function () {
+      session.protectMutuals = !!els.chkProtectMutuals.checked;
+      sendFilterConfig();
+    });
+  }
+
+  if (els.chkProtectVerified) {
+    els.chkProtectVerified.addEventListener("change", function () {
+      session.protectVerified = !!els.chkProtectVerified.checked;
+      sendFilterConfig();
+    });
+  }
+
+  if (els.chkJitter) {
+    els.chkJitter.addEventListener("change", function () {
+      session.jitter = !!els.chkJitter.checked;
+      sendFilterConfig();
+    });
+  }
+
+  if (els.chkSkipAvatars) {
+    els.chkSkipAvatars.addEventListener("change", function () {
+      session.skipDefaultAvatars = !!els.chkSkipAvatars.checked;
+      sendFilterConfig();
     });
   }
 
@@ -473,6 +535,21 @@
       a.download = "untwitt-whitelist.csv";
       a.click();
       URL.revokeObjectURL(url);
+    });
+  }
+
+  if (els.exportAuditBtn) {
+    els.exportAuditBtn.addEventListener("click", function () {
+      safeSend({ type: "GET_STATUS" }, function (err, resp) {
+        var rows = "ts,type,reason,handle\n";
+        var blob = new Blob([rows], { type: "text/csv" });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url;
+        a.download = "untwitt-audit-log.csv";
+        a.click();
+        URL.revokeObjectURL(url);
+      });
     });
   }
 

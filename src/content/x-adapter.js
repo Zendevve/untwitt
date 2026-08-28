@@ -424,8 +424,7 @@ const XAdapter = {
     const host = (win.location.hostname || '').toLowerCase();
     if (host !== 'x.com' && host !== 'twitter.com') return false;
     const path = (win.location.pathname || '').toLowerCase();
-    // Path is /<screen_name>/following, possibly with a trailing slash.
-    return /^\/[a-z0-9_]{1,15}\/following\/?$/.test(path);
+    return /\/following(\/|$)/i.test(path);
   },
 
   /**
