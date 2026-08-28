@@ -40,9 +40,13 @@ import { createRateController } from './rate-controller.js';
 import { createScrollController } from './scroll.js';
 import { createDiscovery } from './discovery.js';
 import { createUnfollowEngine } from './unfollow.js';
+import { createAuditLog } from './audit-log.js';
+import { createHud } from './hud.js';
+import { createSafetyGovernor } from './safety-governor.js';
+import { createWhitelist, DEFAULT_FILTER_CONFIG } from './filter.js';
+
 
 // ---------- Module-level state ----------
-
 const STORAGE_KEY = 'session';
 const SESSION_PERSIST_KEY = STORAGE_KEY;
 const CONSECUTIVE_FAILURE_LIMIT = 3;
@@ -54,6 +58,14 @@ const session = {
   speed: 'normal',
   batchSize: 50,
   customDelayMs: null,
+  filterMode: 'all',
+  protectMutuals: false,
+  protectVerified: false,
+  skipDefaultAvatars: false,
+  bioKeywordsExclude: [],
+  whitelist: [],
+  jitterPct: 0.3,
+  dailyQuota: 400,
   discoveredCount: 0,
   queuedCount: 0,
   unfollowedCount: 0,
@@ -63,6 +75,28 @@ const session = {
   lastError: null,
   consecutiveFailures: 0,
 };
+
+// ---------- Filter / whitelist / safety modules ----------
+const whitelist = createWhitelist(session.whitelist);
+const safetyGovernor = createSafetyGovernor({
+  jitterPct: session.jitterPct,
+  dailyQuota: session.dailyQuota,
+  failureThreshold: CONSECUTIVE_FAILURE_LIMIT,
+});
+const auditLog = createAuditLog();
+let hud = null;
+function ensureHud() {
+  if (hud) return hud;
+  if (typeof document === 'undefined' || !document.body) return null;
+  try {
+    hud = createHud();
+    return hud;
+  } catch (_) {
+    hud = null;
+    return null;
+  }
+}
+
 
 // ---------- Pause / resume coordination ----------
 //
@@ -257,22 +291,43 @@ function emitStatus() {
   });
 }
 
-function emitEvent(type, account) {
-  if (!account) {
-    sendOutbound({ type, payload: null });
-    return;
-  }
+function emitEvent(type, account, extra) {
+  try {
+    auditLog.record(type, account, extra || {});
+  } catch (_) { /* audit failures never break the loop */ }
   sendOutbound({
     type,
     payload: {
-      key: account.key,
-      handle: account.handle,
-      displayName: account.displayName,
+      key: account && account.key,
+      handle: account && account.handle,
+      displayName: account && account.displayName,
+      ...(extra && typeof extra === 'object' ? extra : {}),
     },
+  });
+  _renderHudFromSession();
+}
+
+function _renderHudFromSession() {
+  const h = ensureHud();
+  if (!h) return;
+  const recent = auditLog.all().slice(-8).reverse();
+  const stateLabel = session.running
+    ? (session.paused ? 'PAUSED' : 'RUNNING')
+    : (session.lastError ? 'ERROR' : 'IDLE');
+  h.render({
+    state: stateLabel,
+    unfollowedCount: session.unfollowedCount,
+    detectedCount: session.discoveredCount,
+    skippedCount: session.skippedCount,
+    failedCount: session.failedCount,
+    mode: session.mode,
+    speed: session.speed,
+    recent,
   });
 }
 
 function emitError(reason) {
+  auditLog.record('ERROR', null, { reason: typeof reason === 'string' ? reason : 'unknown' });
   sendOutbound({
     type: 'ERROR',
     payload: {
@@ -280,9 +335,11 @@ function emitError(reason) {
       session: _snapshotSession(),
     },
   });
+  _renderHudFromSession();
 }
 
 function emitCompleted(reason) {
+  auditLog.record('COMPLETED', null, { reason: typeof reason === 'string' ? reason : 'finished' });
   sendOutbound({
     type: 'COMPLETED',
     payload: {
@@ -290,6 +347,7 @@ function emitCompleted(reason) {
       session: _snapshotSession(),
     },
   });
+  _renderHudFromSession();
 }
 
 // ---------- Engine wiring ----------
@@ -302,9 +360,11 @@ const discovery = createDiscovery({ queue, scrollController });
 const unfollow = createUnfollowEngine({
   queue,
   rateController,
-  onEvent: ({ type, account }) => emitEvent(type, account),
+  filterConfig: { ...DEFAULT_FILTER_CONFIG, filterMode: session.filterMode, protectMutuals: session.protectMutuals, protectVerified: session.protectVerified, bioKeywordsExclude: session.bioKeywordsExclude, skipDefaultAvatars: session.skipDefaultAvatars },
+  whitelist,
+  safetyGovernor,
+  onEvent: (e) => emitEvent(e.type, e.account, { reason: e.reason }),
 });
-
 // Initialize the rate controller from the persisted speed, if any.
 if (session.speed === 'custom' && session.customDelayMs != null) {
   rateController.setCustomDelay(session.customDelayMs);
@@ -472,6 +532,10 @@ function handleStart() {
   session.consecutiveFailures = 0;
   session.lastError = null;
   session.elapsedMs = 0;
+  // Reset the safety governor so a prior run's tripped breaker
+  // (e.g. from a previous session) does not poison this one.
+  try { safetyGovernor.reset(); } catch (_) { /* ignore */ }
+  try { rateController.adaptiveReset(); } catch (_) { /* ignore */ }
   _pullCounters();
   emitStatus();
   persistSession();

@@ -3,15 +3,19 @@
 // rate controller, and reports per-account outcomes to the popup.
 //
 // Contract:
-//   createUnfollowEngine({ queue, rateController, confirmTimeoutMs, onEvent })
-//     .processOne()       -> { status, account } | null
+//   createUnfollowEngine({ queue, rateController, confirmTimeoutMs, onEvent, filterConfig, whitelist })
+//     .processOne()       -> { status, account, reason? } | null
 //     .processBatch(n)    -> { processed, success, failed, skipped }
 //     .processAll(idleCheck) -> { processed, exhausted }
 //
 // All X DOM access is delegated to XAdapter. No raw selectors live here.
+// Filter evaluation (whitelist, reciprocity, verified, bio keywords,
+// default avatar) is delegated to filter.js.
 
 import { XAdapter } from './x-adapter.js';
 import { createRateController } from './rate-controller.js';
+import { evaluateAccount } from './filter.js';
+import { createSafetyGovernor } from './safety-governor.js';
 
 const MAX_PROCESS_ALL_ITERATIONS = 10000;
 
@@ -24,10 +28,14 @@ function findCellForAccount(account) {
   return null;
 }
 
-function emit(onEvent, type, account) {
+function emit(onEvent, type, account, extra) {
   if (typeof onEvent !== 'function') return;
   try {
-    onEvent({ type, account });
+    const payload = { type, account };
+    if (extra && typeof extra === 'object') {
+      for (const k of Object.keys(extra)) payload[k] = extra[k];
+    }
+    onEvent(payload);
   } catch (_) {
     // A misbehaving listener must never break the engine.
   }
@@ -38,40 +46,61 @@ export function createUnfollowEngine({
   rateController,
   confirmTimeoutMs = 3000,
   onEvent = null,
+  filterConfig = null,
+  whitelist = null,
+  safetyGovernor = null,
 } = {}) {
   const rc = rateController || createRateController();
   const q = queue;
   const confirmMs = confirmTimeoutMs;
   const listener = onEvent;
+  const cfg = filterConfig;
+  const wl = whitelist;
+  const gov = safetyGovernor || null;
 
   async function processOne() {
     const account = q.popNext();
     if (!account) return null;
 
+    // 1. Filter evaluation -- skip before any DOM work.
+    if (cfg || wl) {
+      const verdict = evaluateAccount(account, cfg || {}, wl);
+      if (verdict && verdict.action === 'skip') {
+        q.markResult(account.key, 'skipped');
+        emit(listener, 'ACCOUNT_SKIPPED', account, { reason: verdict.reason || 'filtered' });
+        return { status: 'skipped', account, reason: verdict.reason || 'filtered' };
+      }
+    }
+
     let status;
+    let reason;
     try {
       const cell = findCellForAccount(account);
       if (!cell) {
         status = 'skipped';
+        reason = 'cell_missing';
         q.markResult(account.key, status);
-        emit(listener, 'ACCOUNT_SKIPPED', account);
+        emit(listener, 'ACCOUNT_SKIPPED', account, { reason });
       } else {
         const button = XAdapter.findUnfollowButton(cell);
         if (!button) {
           status = 'skipped';
+          reason = 'no_unfollow_button';
           q.markResult(account.key, status);
-          emit(listener, 'ACCOUNT_SKIPPED', account);
+          emit(listener, 'ACCOUNT_SKIPPED', account, { reason });
         } else {
           XAdapter.clickUnfollow(button);
           const confirmed = await XAdapter.confirmUnfollow(confirmMs);
           if (!confirmed) {
             status = 'failed';
             rc.adaptiveBackoff();
+            if (gov) gov.recordFailure();
             q.markResult(account.key, status);
             emit(listener, 'ACCOUNT_FAILED', account);
           } else {
             status = 'success';
             rc.adaptiveReset();
+            if (gov) gov.recordSuccess();
             q.markResult(account.key, status);
             emit(listener, 'ACCOUNT_UNFOLLOWED', account);
           }
@@ -80,12 +109,24 @@ export function createUnfollowEngine({
     } catch (_) {
       status = 'failed';
       rc.adaptiveBackoff();
+      if (gov) gov.recordFailure();
       try { q.markResult(account.key, status); } catch (_) { /* ignore */ }
       emit(listener, 'ACCOUNT_FAILED', account);
     }
 
-    await rc.sleep();
-    return { status, account };
+    // Sleep uses the base delay (or jittered if governor is present).
+    if (gov) {
+      const baseDelay = rc.getDelay();
+      const jittered = gov.applyDelay(baseDelay);
+      if (jittered > 0) {
+        await new Promise((resolve) => setTimeout(resolve, jittered));
+      }
+    } else {
+      await rc.sleep();
+    }
+    const result = { status, account };
+    if (reason) result.reason = reason;
+    return result;
   }
 
   async function processBatch(n) {

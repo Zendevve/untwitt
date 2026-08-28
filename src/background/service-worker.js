@@ -7,7 +7,6 @@
   "use strict";
 
   if (typeof global === "undefined" || !global.chrome || !global.chrome.runtime) {
-    // No-op for static parsing under Node test harness.
     return;
   }
 
@@ -19,6 +18,7 @@
       running: false,
       paused: false,
       mode: "all",
+      filterMode: "non_followers",
       speed: "normal",
       batchSize: 50,
       customDelayMs: null,
@@ -27,6 +27,11 @@
       unfollowedCount: 0,
       failedCount: 0,
       skippedCount: 0,
+      whitelist: [],
+      protectMutuals: false,
+      protectVerified: false,
+      jitter: true,
+      skipDefaultAvatars: false,
       elapsedMs: 0,
       lastError: null,
       updatedAt: 0
@@ -48,9 +53,9 @@
 
   function writeSession(session) {
     return new Promise(function (resolve) {
-      var payload = {};
-      payload[SESSION_KEY] = session;
-      chromeRef.storage.session.set(payload, function () {
+      var record = {};
+      record[SESSION_KEY] = session;
+      chromeRef.storage.session.set(record, function () {
         resolve(session);
       });
     });
@@ -65,34 +70,29 @@
   }
 
   function sendToContent(tab, message) {
+    if (!tab || !tab.id) {
+      return Promise.resolve({ ok: false, error: "no_active_tab" });
+    }
     return new Promise(function (resolve) {
-      if (!tab || typeof tab.id !== "number") {
-        resolve({ ok: false, error: "no_active_tab" });
-        return;
-      }
-      try {
-        chromeRef.tabs.sendMessage(tab.id, message, function (response) {
-          if (chromeRef.runtime && chromeRef.runtime.lastError) {
-            resolve({ ok: false, error: chromeRef.runtime.lastError.message || "send_failed" });
-            return;
-          }
-          resolve({ ok: true, response: response });
-        });
-      } catch (err) {
-        resolve({ ok: false, error: (err && err.message) || "send_threw" });
-      }
+      chromeRef.tabs.sendMessage(tab.id, message, function (response) {
+        if (chromeRef.runtime.lastError) {
+          resolve({ ok: false, error: chromeRef.runtime.lastError.message });
+          return;
+        }
+        resolve(response || { ok: true });
+      });
     });
   }
 
   function broadcastToPopup(message) {
     try {
       chromeRef.runtime.sendMessage(message, function () {
-        if (chromeRef.runtime && chromeRef.runtime.lastError) {
-          // No popup listening — ignore.
+        if (chromeRef.runtime.lastError) {
+          // Popup not open; ignore silently.
         }
       });
-    } catch (e) {
-      // Ignore: popup may be closed.
+    } catch (_) {
+      // Ignored
     }
   }
 
@@ -171,6 +171,18 @@
       }
     }
 
+    // Direct forwarding for popup-to-content messages
+    if (msg.type === "START" || msg.type === "PAUSE" || msg.type === "RESUME" ||
+        msg.type === "STOP" || msg.type === "SET_MODE" || msg.type === "SET_SPEED" ||
+        msg.type === "SET_BATCH_SIZE" || msg.type === "SET_WHITELIST") {
+      getActiveTab().then(function (tab) {
+        return sendToContent(tab, msg);
+      }).then(function (result) {
+        sendResponse(result);
+      });
+      return true;
+    }
+
     // Backwards-compatible fallback: if sender is the content script and the
     // message looks like a status/counter event, mirror it into session state
     // and broadcast to the popup.
@@ -194,10 +206,12 @@
         if (typeof msg.running === "boolean") patch.running = msg.running;
         if (typeof msg.paused === "boolean") patch.paused = msg.paused;
         if (typeof msg.mode === "string") patch.mode = msg.mode;
+        if (typeof msg.filterMode === "string") patch.filterMode = msg.filterMode;
         if (typeof msg.speed === "string") patch.speed = msg.speed;
         if (typeof msg.batchSize === "number") patch.batchSize = msg.batchSize;
         if ("customDelayMs" in msg) patch.customDelayMs = msg.customDelayMs;
         if (typeof msg.elapsedMs === "number") patch.elapsedMs = msg.elapsedMs;
+        if (Array.isArray(msg.whitelist)) patch.whitelist = msg.whitelist;
         if ("lastError" in msg) patch.lastError = msg.lastError;
         break;
       case "ACCOUNT_DISCOVERED":
@@ -244,19 +258,15 @@
   }
 
   function initSession() {
-    return readSession().then(function (current) {
-      var needsWrite = !current || typeof current !== "object" ||
-        typeof current.updatedAt !== "number";
-      if (needsWrite) {
-        return writeSession(defaultSession());
+    readSession().then(function (session) {
+      if (!session || !session.updatedAt) {
+        writeSession(defaultSession());
       }
-      return current;
     });
   }
 
   // --- Wire lifecycle ---
   chromeRef.runtime.onInstalled.addListener(function (details) {
-    console.log("[untwitt] installed", details && details.reason);
     initSession();
   });
 

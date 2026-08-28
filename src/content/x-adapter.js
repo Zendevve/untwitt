@@ -80,6 +80,10 @@ const SELECTORS = Object.freeze({
   followingListContainer:
     'section[role="region"] [data-testid="primaryColumn"] section',
   userCellLink: '[data-testid="UserCell"] a[href^="/"]',
+  followsYouBadge: '[data-testid="userFollowIndicator"]',
+  verifiedBadge: '[data-testid="icon-verified"], [aria-label="Verified account"]',
+  bioBlock: '[data-testid="UserDescription"]',
+  avatarImage: '[data-testid="UserCell"] img[src]',
 });
 
 // ---------- Internal helpers (not exported) ----------
@@ -135,6 +139,49 @@ function readDisplayNameFromCell(cell) {
     return text;
   }
   return '';
+}
+
+function detectFollowsYou(cell) {
+  if (!cell) return false;
+  const badge = cell.querySelector(SELECTORS.followsYouBadge);
+  if (badge) return true;
+  const aria = cell.querySelector('[aria-label*="ollows you" i]');
+  if (aria) return true;
+  const spans = cell.querySelectorAll('span');
+  for (const s of spans) {
+    const t = (s.textContent || '').trim().toLowerCase();
+    if (t === 'follows you' || t === 'follows you ') return true;
+  }
+  return false;
+}
+
+function detectVerified(cell) {
+  if (!cell) return false;
+  const badge = cell.querySelector(SELECTORS.verifiedBadge);
+  if (badge) return true;
+  return false;
+}
+
+function detectBio(cell) {
+  if (!cell) return '';
+  const bio = cell.querySelector(SELECTORS.bioBlock);
+  if (bio) {
+    const text = (bio.textContent || '').trim();
+    if (text) return text;
+  }
+  return '';
+}
+
+function detectHasDefaultAvatar(cell) {
+  if (!cell) return false;
+  const img = cell.querySelector(SELECTORS.avatarImage);
+  if (!img) return false;
+  const src = (img.getAttribute('src') || '').toLowerCase();
+  if (!src) return false;
+  if (src.includes('default_profile') || src.includes('egg') || src.includes('absolutely') || src.includes('unknown')) {
+    return true;
+  }
+  return false;
 }
 
 function isFollowingButtonInCell(cell, button) {
@@ -220,9 +267,12 @@ const XAdapter = {
   },
 
   /**
-   * Extract the dedupe key, the @handle, and the human display name from a
-   * cell. Returns null if the cell is missing the link that carries the
-   * handle -- that cell is unidentifiable and must be skipped.
+   * Extract the dedupe key, the @handle, the human display name, and
+   * additional profile attributes (follows-you, verified, bio, default
+   * avatar) from a cell. Returns null if the cell is missing the link
+   * that carries the handle -- that cell is unidentifiable and must be
+   * skipped. Existing consumers reading the {key, handle, displayName}
+   * triplet are unaffected; the new fields are optional additions.
    */
   getAccountIdentity(cell) {
     if (!(cell instanceof HTMLElement)) return null;
@@ -235,6 +285,10 @@ const XAdapter = {
       key: '@' + handle,
       handle,
       displayName,
+      followsYou: detectFollowsYou(cell),
+      isVerified: detectVerified(cell),
+      bio: detectBio(cell),
+      hasDefaultAvatar: detectHasDefaultAvatar(cell),
     };
   },
 
