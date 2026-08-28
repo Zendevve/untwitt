@@ -77,11 +77,11 @@
         <div class="row">
           <label>Speed</label>
           <select id="speed-sel">
-            <option value="fast">Fast (500ms)</option>
-            <option value="normal" selected>Normal (1s)</option>
-            <option value="moderate">Moderate (2s)</option>
+            <option value="stealth" selected>Stealth (4.5s + Jitter - Safe)</option>
             <option value="slow">Slow (5s)</option>
-            <option value="stealth">Stealth (4s + Jitter)</option>
+            <option value="moderate">Moderate (2s)</option>
+            <option value="normal">Normal (1s)</option>
+            <option value="fast">Fast (500ms - Risky)</option>
             <option value="custom">Custom</option>
           </select>
           <input type="number" id="custom-delay" min="100" max="60000" value="1500" class="hidden"> ms

@@ -68,10 +68,18 @@ export async function run() {
   breakerGov.recordFailure();
   check('streak broken by success', breakerGov.isPaused() === false, 'paused unexpectedly');
 
-  // 6. Snapshot
+  // 6. Rate limit cooldown
+  breakerGov.recordRateLimitHit(5000);
+  check('isPaused=true after rate limit hit', breakerGov.isPaused() === true, 'not paused');
+  check('tripReason=rate_limited', breakerGov.tripReason() === 'rate_limited', `reason=${breakerGov.tripReason()}`);
+  check('cooldownRemaining > 0', breakerGov.getCooldownRemaining() > 0, `cd=${breakerGov.getCooldownRemaining()}`);
+  breakerGov.reset();
+  check('reset clears cooldown', breakerGov.getCooldownRemaining() === 0, `cd=${breakerGov.getCooldownRemaining()}`);
+
+  // 7. Snapshot
   const snap = breakerGov.snapshot();
   check('snapshot has failureThreshold', snap.failureThreshold === 3, `snap=${JSON.stringify(snap)}`);
-  check('snapshot has consecutiveFailures=1', snap.consecutiveFailures === 1, `snap=${JSON.stringify(snap)}`);
+  check('snapshot has consecutiveFailures=0', snap.consecutiveFailures === 0, `snap=${JSON.stringify(snap)}`);
 
   return { name: 'safety-governor', pass: passed, fail: failed, errors: failures };
 }

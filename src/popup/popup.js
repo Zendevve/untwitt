@@ -59,7 +59,7 @@
     state: "IDLE",
     mode: "all",
     filterMode: "non_followers",
-    speedPreset: "normal",
+    speedPreset: "stealth",
     customMs: 1500,
     batchSize: 50,
     detected: 0,

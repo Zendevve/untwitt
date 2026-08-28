@@ -47,10 +47,10 @@ export function createSafetyGovernor(config = {}) {
   let consecutiveFailures = 0;
   let paused = false;
   let pauseReason = null;
+  let cooldownUntil = 0;
   let lastJitterMs = 0;
   const dayKey = utcDayKey(new Date());
   let daySuccessCount = 0;
-
   function applyDelay(baseMs) {
     if (paused) return 0;
     const base = Math.max(0, Math.trunc(Number(baseMs) || 0));
@@ -87,16 +87,44 @@ export function createSafetyGovernor(config = {}) {
     return { tripped: false, consecutiveFailures };
   }
 
+  function recordRateLimitHit(cooldownMs = 15 * 60 * 1000) {
+    paused = true;
+    pauseReason = 'rate_limited';
+    cooldownUntil = Date.now() + Math.max(1000, Number(cooldownMs) || 15 * 60 * 1000);
+    if (onTrip) {
+      try { onTrip({ reason: pauseReason, cooldownUntil }); } catch (_) { /* ignore */ }
+    }
+  }
+
+  function getCooldownRemaining() {
+    if (cooldownUntil <= 0) return 0;
+    const remaining = cooldownUntil - Date.now();
+    if (remaining <= 0) {
+      cooldownUntil = 0;
+      if (paused && pauseReason === 'rate_limited') {
+        paused = false;
+        pauseReason = null;
+        consecutiveFailures = 0;
+      }
+      return 0;
+    }
+    return remaining;
+  }
+
   function reset() {
     successCount = 0;
     consecutiveFailures = 0;
     paused = false;
     pauseReason = null;
+    cooldownUntil = 0;
     lastJitterMs = 0;
     daySuccessCount = 0;
   }
 
   function isPaused() {
+    if (cooldownUntil > 0) {
+      if (getCooldownRemaining() > 0) return true;
+    }
     rollDay();
     if (paused && pauseReason === 'daily_quota_reached') {
       const now = utcDayKey(new Date());
@@ -129,8 +157,9 @@ export function createSafetyGovernor(config = {}) {
       failureThreshold: threshold,
       successCount,
       consecutiveFailures,
-      paused,
+      paused: isPaused(),
       pauseReason,
+      cooldownRemainingMs: getCooldownRemaining(),
       daySuccessCount,
       lastJitterMs,
     };
@@ -148,6 +177,8 @@ export function createSafetyGovernor(config = {}) {
     applyDelay,
     recordSuccess,
     recordFailure,
+    recordRateLimitHit,
+    getCooldownRemaining,
     reset,
     isPaused,
     tripReason,

@@ -84,8 +84,8 @@ const SELECTORS = Object.freeze({
   verifiedBadge: '[data-testid="icon-verified"], [aria-label="Verified account"]',
   bioBlock: '[data-testid="UserDescription"]',
   avatarImage: '[data-testid="UserCell"] img[src]',
+  toastAlert: '[data-testid="toast"], [role="alert"]',
 });
-
 // ---------- Internal helpers (not exported) ----------
 
 function safeDocument() {
@@ -466,6 +466,23 @@ const XAdapter = {
   },
 
   /**
+   * Check if X is currently rendering a rate-limit toast or error alert
+   * (e.g. "You are being rate limited", "Please try again after a few moments").
+   */
+  detectRateLimited() {
+    const doc = safeDocument();
+    if (!doc) return false;
+    const alerts = doc.querySelectorAll(SELECTORS.toastAlert);
+    for (const a of alerts) {
+      const t = (a.textContent || '').toLowerCase();
+      if (t.includes('rate limit') || t.includes('try again') || t.includes('few moments') || t.includes('something went wrong')) {
+        return true;
+      }
+    }
+    return false;
+  },
+
+  /**
    * Wait for the next significant DOM mutation under documentElement.
    * Resolves on the first MutationObserver batch after attaching. Rejects
    * (via resolve -- never throws) on timeout, so callers can `await` it
@@ -488,7 +505,6 @@ const XAdapter = {
       try {
         observer.observe(root, { childList: true, subtree: true });
       } catch (_) {
-        // Cannot observe; resolve immediately rather than hang.
         finish();
         return;
       }
@@ -497,7 +513,6 @@ const XAdapter = {
   },
 };
 
-// Re-export SELECTORS as a named export so test code can assert the
 // isolation contract without going through the methods object.
 export { SELECTORS, XAdapter };
 export default XAdapter;

@@ -83,6 +83,16 @@ export function createUnfollowEngine({
     let status;
     let reason;
     try {
+      if (XAdapter.detectRateLimited()) {
+        if (gov) gov.recordRateLimitHit(15 * 60 * 1000);
+        status = 'failed';
+        reason = 'rate_limited';
+        rc.adaptiveBackoff();
+        q.markResult(account.key, status);
+        emit(listener, 'ACCOUNT_FAILED', account, { reason });
+        return { status, account, reason };
+      }
+
       let cell = findCellForAccount(account);
       if (!cell) {
         XAdapter.scrollFollowingList();

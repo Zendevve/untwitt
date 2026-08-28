@@ -4,6 +4,7 @@ const PRESET_BASELINES = Object.freeze({
   normal: 1000,
   moderate: 2000,
   slow: 5000,
+  stealth: 4500,
 });
 
 const MIN_CUSTOM_MS = 100;
