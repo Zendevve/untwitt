@@ -153,7 +153,7 @@ export function createHud(config = {}) {
 
     if (logEl && Array.isArray(state.recent)) {
       logEl.replaceChildren();
-      for (const entry of state.recent.slice(0, 8)) {
+      for (const entry of state.recent.slice(0, 5)) {
         const line = host.ownerDocument.createElement('div');
         const rawType = String(entry.type || 'info').toLowerCase().replace(/[^a-z0-9_]/g, '_');
         line.className = 'log-row log-' + rawType;
@@ -176,7 +176,7 @@ export function createHud(config = {}) {
     switch (type) {
       case 'ACCOUNT_UNFOLLOWED':
       case 'UNFOLLOWED':
-        return `✓ Unfollowed ${target}`;
+        return `Unfollowed ${target}`;
       case 'ACCOUNT_SKIPPED':
       case 'SKIPPED': {
         const reasonMap = {
@@ -187,16 +187,16 @@ export function createHud(config = {}) {
           default_avatar: 'default avatar',
         };
         const r = entry.reason ? ` (${reasonMap[entry.reason] || entry.reason})` : '';
-        return `↷ Skipped ${target}${r}`;
+        return `Skipped ${target}${r}`;
       }
       case 'ACCOUNT_FAILED':
       case 'FAILED':
-        return `✕ Couldn't unfollow ${target}`;
+        return `Failed ${target}`;
       case 'COMPLETED':
-        return '★ Clean-up complete';
+        return 'Clean-up complete';
       case 'RATE_LIMITED':
       case 'COOLDOWN':
-        return '⏳ Pausing briefly to stay safe...';
+        return 'Pausing briefly to stay safe...';
       default: {
         const friendlyType = type
           ? type.replace(/^ACCOUNT_/, '').toLowerCase().replace(/_/g, ' ')
@@ -491,13 +491,13 @@ function buildStyles() {
     [data-untwitt-hud] .log {
       margin-top: 10px;
       padding-top: 8px;
-      max-height: 140px;
+      max-height: 110px;
       overflow-y: auto;
       font-size: 11.5px;
       border-top: 1px solid rgba(255, 255, 255, 0.08);
       display: flex;
       flex-direction: column;
-      gap: 3px;
+      gap: 4px;
     }
 
     [data-untwitt-hud] .log::-webkit-scrollbar {
@@ -525,87 +525,72 @@ function buildStyles() {
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      padding: 4px 7px;
-      border-radius: 6px;
-      font-size: 11px;
-      line-height: 1.35;
+      padding: 3px 0;
+      font-size: 11.5px;
+      line-height: 1.5;
       color: #e7e9ea;
-      background: rgba(255, 255, 255, 0.03);
+      background: transparent;
     }
 
     [data-untwitt-hud] .log-row.log-account_unfollowed,
     [data-untwitt-hud] .log-row.log-unfollowed {
       color: #00ba7c;
-      background: rgba(0, 186, 124, 0.10);
     }
 
     [data-untwitt-hud] .log-row.log-account_failed,
     [data-untwitt-hud] .log-row.log-failed {
       color: #f4212e;
-      background: rgba(244, 33, 46, 0.10);
     }
 
     [data-untwitt-hud] .log-row.log-account_skipped,
     [data-untwitt-hud] .log-row.log-skipped {
       color: #ffd400;
-      background: rgba(255, 212, 0, 0.10);
     }
 
     [data-untwitt-hud] .log-row.log-completed {
       color: #1d9bf0;
-      background: rgba(29, 155, 240, 0.10);
     }
 
     [data-untwitt-hud] .log-row.log-cooldown,
     [data-untwitt-hud] .log-row.log-rate_limited {
       color: #bb86fc;
-      background: rgba(187, 134, 252, 0.10);
     }
 
     [data-untwitt-hud] .log-row.log-info {
       color: #71767b;
-      background: rgba(255, 255, 255, 0.03);
     }
 
     [data-untwitt-hud][data-theme="light"] .log-row {
       color: #0f1419;
-      background: rgba(0, 0, 0, 0.03);
     }
 
     [data-untwitt-hud][data-theme="light"] .log-row.log-account_unfollowed,
     [data-untwitt-hud][data-theme="light"] .log-row.log-unfollowed {
       color: #007a52;
-      background: rgba(0, 186, 124, 0.10);
     }
 
     [data-untwitt-hud][data-theme="light"] .log-row.log-account_failed,
     [data-untwitt-hud][data-theme="light"] .log-row.log-failed {
       color: #d01724;
-      background: rgba(244, 33, 46, 0.10);
     }
 
     [data-untwitt-hud][data-theme="light"] .log-row.log-account_skipped,
     [data-untwitt-hud][data-theme="light"] .log-row.log-skipped {
       color: #8f6b00;
-      background: rgba(255, 212, 0, 0.12);
     }
 
     [data-untwitt-hud][data-theme="light"] .log-row.log-completed {
       color: #0c7abf;
-      background: rgba(29, 155, 240, 0.10);
     }
 
     [data-untwitt-hud][data-theme="light"] .log-row.log-cooldown,
     [data-untwitt-hud][data-theme="light"] .log-row.log-rate_limited {
       color: #6200ea;
-      background: rgba(98, 0, 234, 0.08);
     }
 
     [data-untwitt-hud][data-theme="light"] .log-row.log-info {
       color: #536471;
-      background: rgba(0, 0, 0, 0.03);
     }
-
     [data-untwitt-hud][data-collapsed="true"] {
       min-width: 0;
       max-width: fit-content;
