@@ -20,10 +20,18 @@ import { createSafetyGovernor } from './safety-governor.js';
 const MAX_PROCESS_ALL_ITERATIONS = 10000;
 
 function findCellForAccount(account) {
+  if (!account) return null;
   const cells = XAdapter.findAccountCells();
+  const accKey = (account.key || '').toLowerCase();
+  const accHandle = (account.handle || '').toLowerCase();
   for (const cell of cells) {
     const identity = XAdapter.getAccountIdentity(cell);
-    if (identity && identity.key === account.key) return cell;
+    if (!identity) continue;
+    const idKey = (identity.key || '').toLowerCase();
+    const idHandle = (identity.handle || '').toLowerCase();
+    if ((accKey && idKey === accKey) || (accHandle && idHandle === accHandle)) {
+      return cell;
+    }
   }
   return null;
 }

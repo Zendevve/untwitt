@@ -4,6 +4,7 @@
 export function createQueue() {
   const accounts = new Map();
   const order = [];
+  const completedKeys = new Set();
 
   const counts = {
     discovered: 0,
@@ -15,7 +16,7 @@ export function createQueue() {
 
   function add(identity) {
     const key = identity.key;
-    if (accounts.has(key)) return false;
+    if (completedKeys.has(key) || accounts.has(key)) return false;
 
     const account = {
       key,
@@ -45,9 +46,15 @@ export function createQueue() {
 
     if (account.state === "queued") counts.queued -= 1;
 
-    if (result === "success") counts.unfollowed += 1;
-    else if (result === "failed") counts.failed += 1;
-    else if (result === "skipped") counts.skipped += 1;
+    if (result === "success") {
+      counts.unfollowed += 1;
+      completedKeys.add(key);
+    } else if (result === "failed") {
+      counts.failed += 1;
+    } else if (result === "skipped") {
+      counts.skipped += 1;
+      completedKeys.add(key);
+    }
 
     account.state = result;
     account.processedAt = Date.now();
@@ -98,6 +105,7 @@ export function createQueue() {
   function reset() {
     accounts.clear();
     order.length = 0;
+    completedKeys.clear();
     counts.discovered = 0;
     counts.queued = 0;
     counts.unfollowed = 0;
@@ -127,3 +135,5 @@ export function createQueue() {
     all,
   };
 }
+
+export default createQueue;

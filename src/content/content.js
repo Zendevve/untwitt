@@ -357,10 +357,18 @@ const rateController = createRateController();
 const scrollController = createScrollController();
 
 const discovery = createDiscovery({ queue, scrollController });
+const liveFilterConfig = {
+  get filterMode() { return session.filterMode; },
+  get protectMutuals() { return session.protectMutuals; },
+  get protectVerified() { return session.protectVerified; },
+  get skipDefaultAvatars() { return session.skipDefaultAvatars; },
+  get bioKeywordsExclude() { return session.bioKeywordsExclude; },
+};
+
 const unfollow = createUnfollowEngine({
   queue,
   rateController,
-  filterConfig: { ...DEFAULT_FILTER_CONFIG, filterMode: session.filterMode, protectMutuals: session.protectMutuals, protectVerified: session.protectVerified, bioKeywordsExclude: session.bioKeywordsExclude, skipDefaultAvatars: session.skipDefaultAvatars },
+  filterConfig: liveFilterConfig,
   whitelist,
   safetyGovernor,
   onEvent: (e) => emitEvent(e.type, e.account, { reason: e.reason }),
