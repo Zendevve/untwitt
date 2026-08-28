@@ -187,25 +187,24 @@ function detectHasDefaultAvatar(cell) {
 function isFollowingButtonInCell(cell, button) {
   if (!cell || !button) return false;
   if (!cell.contains(button)) return false;
-  const testid = button.getAttribute('data-testid') || '';
+  const testid = (button.getAttribute('data-testid') || '').toLowerCase();
   // Must end in "-unfollow" (the "you are following" state) and NOT
   // "-follow" (the "you are not following" state, e.g. "Follow back").
   if (testid.endsWith('-unfollow')) return true;
   const aria = (button.getAttribute('aria-label') || '').toLowerCase();
-  if (aria.startsWith('following @')) return true;
+  if (aria.startsWith('following @') || aria === 'following' || aria.includes('following @') || aria.includes('following')) return true;
+  const text = (button.textContent || '').trim().toLowerCase();
+  if (text === 'following' || text.startsWith('following')) return true;
   return false;
 }
 
 function findUnfollowButtonWithFallback(cell) {
   // Primary path: selector-based.
   const direct = cell.querySelector(SELECTORS.unfollowButton);
-  const Ctor = htmlButtonCtor();
-  if (Ctor && direct instanceof Ctor) return direct;
-  // Fallback: walk buttons inside the cell looking for the "Following @"
-  // aria-label. Skips "Follow back" / "Follow" buttons because their
-  // aria-label starts with "follow @", not "following @".
-  const buttons = cell.querySelectorAll('button');
-  for (const b of buttons) {
+  if (direct && isFollowingButtonInCell(cell, direct)) return direct;
+  // Fallback: check buttons and role="button" elements inside the cell
+  const candidates = cell.querySelectorAll('button, [role="button"], [data-testid$="-unfollow"]');
+  for (const b of candidates) {
     if (isFollowingButtonInCell(cell, b)) return b;
   }
   return null;
@@ -214,15 +213,14 @@ function findUnfollowButtonWithFallback(cell) {
 function findConfirmButtonInDialog(dialog) {
   if (!dialog) return null;
   const direct = dialog.querySelector('[data-testid="confirmationSheetConfirm"]');
-  const Ctor = htmlButtonCtor();
-  if (Ctor && direct instanceof Ctor) return direct;
-  // Fallback: any button with the visible text "Unfollow" inside the
-  // dialog. Matches button text and aria-label; ignores case.
-  const buttons = dialog.querySelectorAll('button');
-  for (const b of buttons) {
+  if (direct && direct instanceof HTMLElement) return direct;
+  // Fallback: any button or role="button" with the text/aria/testid "Unfollow" inside dialog
+  const candidates = dialog.querySelectorAll('button, [role="button"]');
+  for (const b of candidates) {
     const txt = (b.textContent || '').trim().toLowerCase();
     const aria = (b.getAttribute('aria-label') || '').trim().toLowerCase();
-    if (txt === 'unfollow' || aria === 'unfollow') return b;
+    const testid = (b.getAttribute('data-testid') || '').toLowerCase();
+    if (txt === 'unfollow' || aria === 'unfollow' || testid.includes('confirm') || txt.includes('unfollow')) return b;
   }
   return null;
 }
@@ -300,8 +298,7 @@ const XAdapter = {
   findUnfollowButton(cell) {
     if (!(cell instanceof HTMLElement)) return null;
     const b = findUnfollowButtonWithFallback(cell);
-    const Ctor = htmlButtonCtor();
-    if (!Ctor || !(b instanceof Ctor)) return null;
+    if (!b || !(b instanceof HTMLElement)) return null;
     return isFollowingButtonInCell(cell, b) ? b : null;
   },
 
@@ -310,11 +307,13 @@ const XAdapter = {
    * confirmation dialog; the caller drives confirmation separately.
    */
   clickUnfollow(button) {
-    const Ctor = htmlButtonCtor();
-    if (Ctor && !(button instanceof Ctor)) return;
-    if (typeof button.click === 'function') button.click();
+    if (!button || !(button instanceof HTMLElement)) return;
+    if (typeof button.click === 'function') {
+      button.click();
+    } else {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    }
   },
-
   /**
    * Wait for the confirmation dialog to appear, click its Unfollow button,
    * then wait for the dialog to disappear. Resolves true on a confirmed
@@ -403,16 +402,19 @@ const XAdapter = {
     const doc = safeDocument();
     const win = safeWindow();
     if (!doc || !win) return;
-    const container = doc.querySelector(SELECTORS.followingListContainer);
-    if (container && typeof container.scrollBy === 'function') {
-      container.scrollBy(0, 600);
-      return;
-    }
-    if (typeof win.scrollBy === 'function') {
-      win.scrollBy(0, 600);
+    try {
+      const container = doc.querySelector(SELECTORS.followingListContainer);
+      if (container && typeof container.scrollBy === 'function') {
+        container.scrollBy(0, 600);
+        return;
+      }
+      if (typeof win.scrollBy === 'function') {
+        win.scrollBy(0, 600);
+      }
+    } catch (_) {
+      // JSDOM environment or detached container
     }
   },
-
   /**
    * True iff the current URL matches an X Following page: /<user>/following
    * with optional query string or trailing slash. Matches both x.com and

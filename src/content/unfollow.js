@@ -75,13 +75,21 @@ export function createUnfollowEngine({
     let status;
     let reason;
     try {
-      const cell = findCellForAccount(account);
+      let cell = findCellForAccount(account);
+      if (!cell) {
+        XAdapter.scrollFollowingList();
+        await XAdapter.waitForDomMutation(500);
+        cell = findCellForAccount(account);
+      }
       if (!cell) {
         status = 'skipped';
         reason = 'cell_missing';
         q.markResult(account.key, status);
         emit(listener, 'ACCOUNT_SKIPPED', account, { reason });
       } else {
+        if (typeof cell.scrollIntoView === 'function') {
+          try { cell.scrollIntoView({ block: 'nearest' }); } catch (_) { /* ignore */ }
+        }
         const button = XAdapter.findUnfollowButton(cell);
         if (!button) {
           status = 'skipped';
