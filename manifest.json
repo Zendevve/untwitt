@@ -24,8 +24,19 @@
         "https://x.com/*",
         "https://twitter.com/*"
       ],
-      "js": ["src/content/content.js"],
+      "js": ["src/content/loader.js"],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/content/*.js"
+      ],
+      "matches": [
+        "https://x.com/*",
+        "https://twitter.com/*"
+      ]
     }
   ]
 }
