@@ -1,10 +1,13 @@
-// Preset baseline delays in milliseconds.
+// Preset baseline delays in milliseconds. Conservative defaults tuned to
+// stay under X's per-account unfollow rate limit; anything below ~6s per
+// action risks HTTP 429 ("Try again later") responses from
+// /i/api/1.1/friendships/destroy.json.
 const PRESET_BASELINES = Object.freeze({
-  fast: 500,
-  normal: 1000,
-  moderate: 2000,
-  slow: 5000,
-  stealth: 4500,
+  fast: 1500,
+  normal: 3000,
+  moderate: 5000,
+  slow: 8000,
+  stealth: 6500,
 });
 
 const MIN_CUSTOM_MS = 100;

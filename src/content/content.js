@@ -381,6 +381,31 @@ if (session.speed === 'custom' && session.customDelayMs != null) {
   rateController.setPreset(session.speed);
 }
 
+// Observe X's friendships/destroy.json responses so we can react to HTTP
+// 429 rate limiting even when no toast is visible. On 429 we slow the
+// rate controller, trip the safety governor's 15-minute cooldown, and
+// pause the loop until the cooldown expires.
+if (typeof XAdapter.startNetworkObserver === 'function') {
+  XAdapter.startNetworkObserver(({ status }) => {
+    if (status !== 429) return;
+    rateController.adaptiveBackoff();
+    rateController.adaptiveBackoff();
+    try { safetyGovernor.recordRateLimitHit(15 * 60 * 1000); } catch (_) { /* ignore */ }
+    _pauseForRateLimit();
+  });
+}
+
+function _pauseForRateLimit() {
+  if (!session.running) return;
+  session.paused = true;
+  session.lastError = 'rate_limited';
+  emitStatus();
+  sendOutbound({ type: 'ERROR', payload: { reason: 'rate_limited' } });
+  _setPauseWaiter();
+  // Surface to HUD log so the user understands why we stopped.
+  try { auditLog.record('RATE_LIMITED', null, { reason: 'http_429' }); } catch (_) { /* ignore */ }
+}
+
 // ---------- Counters ----------
 
 function _pullCounters() {

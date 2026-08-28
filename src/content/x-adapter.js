@@ -511,6 +511,89 @@ const XAdapter = {
       const timer = setTimeout(finish, timeoutMs);
     });
   },
+
+  /**
+   * Install a passive observer on XMLHttpRequest and fetch so callers
+   * can react to X's unfollow API responses. The observer is idempotent:
+   * calling startNetworkObserver() more than once is a no-op. Returns a
+   * stop() function that detaches both hooks.
+   *
+   * The callback receives { status, url, method } for any XHR or fetch
+   * response to a URL matching /friendships/destroy/. Callers should
+   * treat status 429 as a hard rate-limit signal even if no toast is
+   * visible.
+   */
+  startNetworkObserver(callback) {
+    if (typeof callback !== 'function') return () => {};
+    if (XAdapter.__netObserverInstalled) {
+      if (typeof XAdapter.__netObserverCallback === 'function') {
+        XAdapter.__netObserverCallback = callback;
+      }
+      return XAdapter.__netObserverStop || (() => {});
+    }
+
+    const win = safeWindow();
+    if (!win) return () => {};
+
+    const isDestroy = (url) => typeof url === 'string' && /friendships\/destroy/.test(url);
+    const fire = (status, url, method) => {
+      try {
+        callback({ status, url, method });
+      } catch (_) {
+        // Observer callback errors must never propagate into X's hooks.
+      }
+    };
+
+    // XMLHttpRequest hook
+    const OriginalXHR = win.XMLHttpRequest;
+    if (typeof OriginalXHR === 'function' && !OriginalXHR.__untwittPatched) {
+      const PatchedXHR = function () {
+        const xhr = new OriginalXHR();
+        const origOpen = xhr.open.bind(xhr);
+        let method = 'GET';
+        let url = '';
+        xhr.open = function (m, u) {
+          method = String(m || 'GET').toUpperCase();
+          url = String(u || '');
+          return origOpen(m, u);
+        };
+        xhr.addEventListener('load', () => {
+          if (isDestroy(url)) fire(xhr.status, url, method);
+        });
+        return xhr;
+      };
+      PatchedXHR.__untwittPatched = true;
+      // Preserve prototype chain so instanceof checks still pass.
+      PatchedXHR.prototype = OriginalXHR.prototype;
+      win.XMLHttpRequest = PatchedXHR;
+    }
+
+    // fetch hook
+    const origFetch = win.fetch;
+    if (typeof origFetch === 'function' && !origFetch.__untwittPatched) {
+      const patchedFetch = function (input, init) {
+        const method = (init && init.method) || (input && input.method) || 'GET';
+        const url = typeof input === 'string' ? input : (input && input.url) || '';
+        return origFetch.call(this, input, init).then((response) => {
+          if (isDestroy(url)) fire(response.status, url, String(method).toUpperCase());
+          return response;
+        });
+      };
+      patchedFetch.__untwittPatched = true;
+      win.fetch = patchedFetch;
+    }
+
+    XAdapter.__netObserverInstalled = true;
+    XAdapter.__netObserverCallback = callback;
+    XAdapter.__netObserverStop = () => {
+      try { win.XMLHttpRequest = OriginalXHR; } catch (_) { /* ignore */ }
+      try { win.fetch = origFetch; } catch (_) { /* ignore */ }
+      XAdapter.__netObserverInstalled = false;
+      XAdapter.__netObserverCallback = null;
+      XAdapter.__netObserverStop = null;
+    };
+    return XAdapter.__netObserverStop;
+  },
 };
 
 // isolation contract without going through the methods object.

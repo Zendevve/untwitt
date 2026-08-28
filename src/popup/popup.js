@@ -1,5 +1,5 @@
-// untwitt popup script — classic script (no type=module) for MV3 popup compat.
-// Talks to the service worker and content script via chrome.runtime.sendMessage.
+// untwitt popup script — classic script (no type=module) for MV3 popup compatibility.
+// Talks to the background service worker and content script via chrome.runtime.sendMessage.
 
 (function () {
   "use strict";
@@ -12,37 +12,37 @@
   var $ = function (id) { return document.getElementById(id); };
 
   var els = {
-    statePill:        $("state-pill"),
-    unfollowedBig:    $("unfollowed-big"),
-    detected:         $("detected"),
-    filterDisp:       $("filter-disp"),
-    speedDisp:        $("speed-disp"),
-    elapsed:          $("elapsed"),
+    statePill:         $("state-pill"),
+    unfollowedBig:     $("unfollowed-big"),
+    detected:          $("detected"),
+    filterDisp:        $("filter-disp"),
+    speedDisp:         $("speed-disp"),
+    elapsed:           $("elapsed"),
 
-    cDetected:        $("c-detected"),
-    cQueued:          $("c-queued"),
-    cUnfollowed:      $("c-unfollowed"),
-    cFailed:          $("c-failed"),
-    cSkipped:         $("c-skipped"),
-    progressBar:      $("progress-bar"),
+    cDetected:         $("c-detected"),
+    cQueued:           $("c-queued"),
+    cUnfollowed:       $("c-unfollowed"),
+    cFailed:           $("c-failed"),
+    cSkipped:          $("c-skipped"),
+    progressBar:       $("progress-bar"),
 
-    primaryBtn:       $("primary-btn"),
-    stopBtn:          $("stop-btn"),
-    pauseBtn:         $("pause-btn"),
-    resumeBtn:        $("resume-btn"),
-    resetBtn:         $("reset-btn"),
+    primaryBtn:        $("primary-btn"),
+    stopBtn:           $("stop-btn"),
+    pauseBtn:          $("pause-btn"),
+    resumeBtn:         $("resume-btn"),
+    resetBtn:          $("reset-btn"),
 
-    filterSel:        $("filter-sel"),
-    modeSel:          $("mode-sel"),
-    batchSizeSel:     $("batch-size-sel"),
-    speedSel:         $("speed-sel"),
-    customDelay:      $("custom-delay"),
+    filterSel:         $("filter-sel"),
+    modeSel:           $("mode-sel"),
+    batchSizeSel:      $("batch-size-sel"),
+    speedSel:          $("speed-sel"),
+    customDelay:       $("custom-delay"),
 
-    wlInput:          $("wl-input"),
-    wlAddBtn:         $("wl-add-btn"),
-    wlList:           $("wl-list"),
-    wlExportBtn:      $("wl-export-btn"),
-    wlClearBtn:       $("wl-clear-btn"),
+    wlInput:           $("wl-input"),
+    wlAddBtn:          $("wl-add-btn"),
+    wlList:            $("wl-list"),
+    wlExportBtn:       $("wl-export-btn"),
+    wlClearBtn:        $("wl-clear-btn"),
 
     chkProtectMutuals: $("chk-protect-mutuals"),
     chkProtectVerified:$("chk-protect-verified"),
@@ -50,8 +50,8 @@
     chkSkipAvatars:    $("chk-skip-default-avatars"),
     exportAuditBtn:    $("export-audit-btn"),
 
-    connDot:          $("conn-dot"),
-    connText:         $("conn-text"),
+    connDot:           $("conn-dot"),
+    connText:          $("conn-text"),
   };
 
   // --- Local state cache -----------------------------------------------------
@@ -100,6 +100,7 @@
         filterMode: session.filterMode,
         protectMutuals: session.protectMutuals,
         protectVerified: session.protectVerified,
+        jitter: session.jitter,
         skipDefaultAvatars: session.skipDefaultAvatars,
       }
     });
@@ -120,9 +121,9 @@
       case "normal":   return "Normal";
       case "moderate": return "Moderate";
       case "slow":     return "Slow";
-      case "stealth":  return "Stealth";
+      case "stealth":  return "Gentle";
       case "custom":   return "Custom";
-      default:         return "Normal";
+      default:         return "Gentle";
     }
   }
 
@@ -130,22 +131,35 @@
     switch (filter) {
       case "non_followers": return "Non-followers";
       case "mutuals_only":  return "Mutuals";
-      case "all":           return "All";
+      case "all":           return "All accounts";
       default:              return "Non-followers";
+    }
+  }
+
+  function stateLabel(state) {
+    switch (String(state || "IDLE").toUpperCase()) {
+      case "RUNNING": return "Running";
+      case "PAUSED":  return "Paused";
+      case "DONE":    return "Completed";
+      case "ERROR":   return "Error";
+      case "STOPPED": return "Stopped";
+      default:        return "Ready";
     }
   }
 
   function setProgress(pct) {
     var p = Math.max(0, Math.min(100, pct || 0));
-    if (els.progressBar) els.progressBar.style.width = p + "%";
+    if (els.progressBar) {
+      els.progressBar.style.width = p + "%";
+    }
   }
 
-  // --- Render ----------------------------------------------------------------
   function render() {
     var st = (session.state || "IDLE").toLowerCase();
+
     if (els.statePill) {
-      els.statePill.textContent = (session.state || "IDLE").toUpperCase();
       els.statePill.className = "state " + st;
+      els.statePill.textContent = stateLabel(session.state);
     }
 
     if (els.unfollowedBig) els.unfollowedBig.textContent = String(session.unfollowed | 0);
@@ -159,36 +173,41 @@
     if (els.cFailed)     els.cFailed.textContent     = String(session.failed | 0);
     if (els.cSkipped)    els.cSkipped.textContent    = String(session.skipped | 0);
 
-    var denom = (session.detected | 0) + (session.queued | 0) + (session.unfollowed | 0);
-    if (denom > 0) {
-      setProgress((session.unfollowed | 0) / denom * 100);
+    var processed = (session.unfollowed | 0) + (session.failed | 0) + (session.skipped | 0);
+    var denom = processed + (session.queued | 0);
+    if (st === "done") {
+      setProgress(100);
+    } else if (denom > 0) {
+      setProgress((processed / denom) * 100);
+    } else if ((session.detected | 0) > 0) {
+      setProgress((processed / (session.detected | 0)) * 100);
     } else {
       setProgress(0);
     }
 
-    // Primary button label + state
-    if (st === "running") {
-      els.primaryBtn.textContent = "PAUSE";
-      els.primaryBtn.disabled = false;
-      els.stopBtn.disabled = false;
-    } else if (st === "paused") {
-      els.primaryBtn.textContent = "RESUME";
-      els.primaryBtn.disabled = false;
-      els.stopBtn.disabled = false;
-    } else if (st === "done") {
-      els.primaryBtn.textContent = "DONE";
-      els.primaryBtn.disabled = true;
-      els.stopBtn.disabled = true;
-    } else {
-      if (session.filterMode === "non_followers") {
-        els.primaryBtn.textContent = "UNFOLLOW NON-FOLLOWERS";
-      } else if (session.filterMode === "mutuals_only") {
-        els.primaryBtn.textContent = "UNFOLLOW MUTUALS";
+    // Primary action button states
+    if (els.primaryBtn) {
+      if (st === "running") {
+        els.primaryBtn.textContent = "Pause";
+        els.primaryBtn.className = "btn-action primary btn-pause";
+        els.primaryBtn.disabled = false;
+        if (els.stopBtn) els.stopBtn.disabled = false;
+      } else if (st === "paused") {
+        els.primaryBtn.textContent = "Resume";
+        els.primaryBtn.className = "btn-action primary btn-resume";
+        els.primaryBtn.disabled = false;
+        if (els.stopBtn) els.stopBtn.disabled = false;
+      } else if (st === "done") {
+        els.primaryBtn.textContent = "All done!";
+        els.primaryBtn.className = "btn-action primary btn-done";
+        els.primaryBtn.disabled = true;
+        if (els.stopBtn) els.stopBtn.disabled = true;
       } else {
-        els.primaryBtn.textContent = "UNFOLLOW ALL";
+        els.primaryBtn.textContent = "Start Unfollowing";
+        els.primaryBtn.className = "btn-action primary";
+        els.primaryBtn.disabled = false;
+        if (els.stopBtn) els.stopBtn.disabled = true;
       }
-      els.primaryBtn.disabled = false;
-      els.stopBtn.disabled = true;
     }
 
     if (els.filterSel && els.filterSel.value !== session.filterMode) {
@@ -234,9 +253,8 @@
     var list = Array.isArray(session.whitelist) ? session.whitelist : [];
     if (list.length === 0) {
       var emptyLi = document.createElement("li");
-      emptyLi.className = "wl-item";
-      emptyLi.style.color = "var(--fg-dim)";
-      emptyLi.textContent = "No accounts protected.";
+      emptyLi.className = "wl-empty";
+      emptyLi.textContent = "No protected accounts yet. Add handles above to keep them.";
       els.wlList.appendChild(emptyLi);
       return;
     }
@@ -246,14 +264,17 @@
       li.className = "wl-item";
 
       var span = document.createElement("span");
+      span.className = "wl-handle";
       span.textContent = h;
 
       var del = document.createElement("button");
       del.type = "button";
       del.className = "wl-del-btn";
-      del.textContent = "✕";
-      del.title = "Remove from whitelist";
-      del.addEventListener("click", function () {
+      del.innerHTML = "&times;";
+      del.title = "Remove from Keep List";
+      del.setAttribute("aria-label", "Remove " + h);
+      del.addEventListener("click", function (e) {
+        e.stopPropagation();
         removeWhitelistHandle(h);
       });
 
@@ -308,7 +329,7 @@
         var t = tabs && tabs[0];
         if (!t) {
           if (els.connDot) els.connDot.className = "dot";
-          if (els.connText) els.connText.textContent = "no active tab";
+          if (els.connText) els.connText.textContent = "No active tab";
           return;
         }
         if (chrome.tabs.sendMessage) {
@@ -316,38 +337,80 @@
             chrome.tabs.sendMessage(t.id, { type: "PING" }, function (resp) {
               if (chrome.runtime.lastError || !resp) {
                 if (els.connDot) els.connDot.className = "dot error";
-                if (els.connText) els.connText.textContent = "tab not ready (refresh x.com)";
+                if (els.connText) els.connText.textContent = "Not connected (refresh x.com)";
                 isCurrentTabFollowingPage = false;
               } else {
                 if (els.connDot) els.connDot.className = "dot connected";
                 if (resp.isFollowingPage) {
-                  if (els.connText) els.connText.textContent = "connected (Following page)";
+                  if (els.connText) els.connText.textContent = "Connected to Following page";
                   isCurrentTabFollowingPage = true;
                 } else {
-                  if (els.connText) els.connText.textContent = "connected (navigate to /following)";
+                  if (els.connText) els.connText.textContent = "Connected (navigate to /following)";
                   isCurrentTabFollowingPage = false;
                 }
               }
             });
           } catch (e) {
             if (els.connDot) els.connDot.className = "dot error";
-            if (els.connText) els.connText.textContent = "tab not ready";
+            if (els.connText) els.connText.textContent = "Tab not ready";
             isCurrentTabFollowingPage = false;
           }
         }
       });
     } catch (e) {
       if (els.connDot) els.connDot.className = "dot";
-      if (els.connText) els.connText.textContent = "no active tab";
+      if (els.connText) els.connText.textContent = "No active tab";
       isCurrentTabFollowingPage = false;
     }
   }
 
+  // Map background session schema onto popup session cache
+  function mergeSessionData(data) {
+    if (!data || typeof data !== "object") return;
+    if (typeof data.running === "boolean" || typeof data.paused === "boolean") {
+      if (data.running && !data.paused) session.state = "RUNNING";
+      else if (data.running && data.paused) session.state = "PAUSED";
+      else session.state = data.lastError ? "ERROR" : "IDLE";
+    }
+    if (typeof data.state === "string") session.state = data.state;
+    if (typeof data.mode === "string") session.mode = data.mode;
+    if (typeof data.filterMode === "string") session.filterMode = data.filterMode;
+    if (typeof data.speed === "string") session.speedPreset = data.speed;
+    if (typeof data.speedPreset === "string") session.speedPreset = data.speedPreset;
+    if (typeof data.batchSize === "number") session.batchSize = data.batchSize;
+    if (typeof data.customDelayMs === "number") session.customMs = data.customDelayMs;
+    if (typeof data.customMs === "number") session.customMs = data.customMs;
+    if (typeof data.discoveredCount === "number") session.detected = data.discoveredCount;
+    if (typeof data.detected === "number") session.detected = data.detected;
+    if (typeof data.queuedCount === "number") session.queued = data.queuedCount;
+    if (typeof data.queued === "number") session.queued = data.queued;
+    if (typeof data.unfollowedCount === "number") session.unfollowed = data.unfollowedCount;
+    if (typeof data.unfollowed === "number") session.unfollowed = data.unfollowed;
+    if (typeof data.failedCount === "number") session.failed = data.failedCount;
+    if (typeof data.failed === "number") session.failed = data.failed;
+    if (typeof data.skippedCount === "number") session.skipped = data.skippedCount;
+    if (typeof data.skipped === "number") session.skipped = data.skipped;
+    if (Array.isArray(data.whitelist)) session.whitelist = data.whitelist;
+    if (typeof data.protectMutuals === "boolean") session.protectMutuals = data.protectMutuals;
+    if (typeof data.protectVerified === "boolean") session.protectVerified = data.protectVerified;
+    if (typeof data.jitter === "boolean") session.jitter = data.jitter;
+    if (typeof data.skipDefaultAvatars === "boolean") session.skipDefaultAvatars = data.skipDefaultAvatars;
+    if (data.updatedAt) session.updatedAt = data.updatedAt;
+  }
+
   // --- Session IO ------------------------------------------------------------
   function loadSession() {
-    safeSend({ type: "GET_SESSION" }, function (err, resp) {
-      if (err || !resp) return;
-      session = Object.assign({}, session, resp);
+    safeSend({ type: "GET_SESSION", target: "service-worker" }, function (err, resp) {
+      if (err || !resp || !resp.session) {
+        // Fallback standard GET_STATUS
+        safeSend({ type: "GET_STATUS" }, function (e2, r2) {
+          if (r2 && r2.session) mergeSessionData(r2.session);
+          else if (r2) mergeSessionData(r2);
+          render();
+        });
+        return;
+      }
+      mergeSessionData(resp.session);
       lastModeSent = session.mode;
       lastBatchSent = session.batchSize;
       lastSpeedSent = session.speedPreset;
@@ -362,8 +425,12 @@
   tabButtons.forEach(function (btn) {
     btn.addEventListener("click", function () {
       var tabId = btn.getAttribute("data-tab");
-      tabButtons.forEach(function (b) { b.classList.remove("active"); });
+      tabButtons.forEach(function (b) {
+        b.classList.remove("active");
+        b.setAttribute("aria-selected", "false");
+      });
       btn.classList.add("active");
+      btn.setAttribute("aria-selected", "true");
 
       document.querySelectorAll(".tab-content").forEach(function (content) {
         content.classList.add("hidden");
@@ -409,6 +476,18 @@
     });
   }
 
+  if (els.pauseBtn) {
+    els.pauseBtn.addEventListener("click", function () {
+      safeSend({ type: "PAUSE" });
+    });
+  }
+
+  if (els.resumeBtn) {
+    els.resumeBtn.addEventListener("click", function () {
+      safeSend({ type: "RESUME" });
+    });
+  }
+
   if (els.stopBtn) {
     els.stopBtn.addEventListener("click", function () {
       safeSend({ type: "STOP" });
@@ -417,7 +496,7 @@
 
   if (els.resetBtn) {
     els.resetBtn.addEventListener("click", function () {
-      safeSend({ type: "RESET_SESSION" }, function () {
+      safeSend({ type: "RESET_SESSION", target: "service-worker" }, function () {
         loadSession();
       });
     });
@@ -508,6 +587,17 @@
     });
   }
 
+  if (els.customDelay) {
+    els.customDelay.addEventListener("input", function () {
+      var val = parseInt(els.customDelay.value, 10);
+      if (!isNaN(val) && val >= 100) {
+        session.customMs = val;
+        lastCustomSent = val;
+        safeSend({ type: "SET_SPEED", payload: { preset: "custom", customMs: val } });
+      }
+    });
+  }
+
   if (els.wlAddBtn && els.wlInput) {
     els.wlAddBtn.addEventListener("click", function () {
       addWhitelistHandle(els.wlInput.value);
@@ -528,11 +618,11 @@
   if (els.wlExportBtn) {
     els.wlExportBtn.addEventListener("click", function () {
       var text = "handle\n" + (session.whitelist || []).join("\n");
-      var blob = new Blob([text], { type: "text/csv" });
+      var blob = new Blob([text], { type: "text/csv;charset=utf-8;" });
       var url = URL.createObjectURL(blob);
       var a = document.createElement("a");
       a.href = url;
-      a.download = "untwitt-whitelist.csv";
+      a.download = "untwitt-keep-list.csv";
       a.click();
       URL.revokeObjectURL(url);
     });
@@ -541,8 +631,18 @@
   if (els.exportAuditBtn) {
     els.exportAuditBtn.addEventListener("click", function () {
       safeSend({ type: "GET_STATUS" }, function (err, resp) {
-        var rows = "ts,type,reason,handle\n";
-        var blob = new Blob([rows], { type: "text/csv" });
+        var rows = "timestamp,type,handle,reason\n";
+        if (resp && resp.audit && Array.isArray(resp.audit)) {
+          resp.audit.forEach(function (entry) {
+            rows += [
+              JSON.stringify(entry.timestamp || new Date().toISOString()),
+              JSON.stringify(entry.type || ""),
+              JSON.stringify(entry.handle || ""),
+              JSON.stringify(entry.reason || "")
+            ].join(",") + "\n";
+          });
+        }
+        var blob = new Blob([rows], { type: "text/csv;charset=utf-8;" });
         var url = URL.createObjectURL(blob);
         var a = document.createElement("a");
         a.href = url;
@@ -553,21 +653,43 @@
     });
   }
 
-  // --- Inbound STATUS messages from service worker --------------------------
+  // --- Inbound message handler from service worker & content script ---------
   if (chrome.runtime && chrome.runtime.onMessage) {
     chrome.runtime.onMessage.addListener(function (msg) {
       if (!msg || typeof msg !== "object") return;
-      if (msg.type === "STATUS" && msg.session) {
-        session = Object.assign({}, session, msg.session);
+
+      if (msg.type === "STATUS" && msg.payload) {
+        mergeSessionData(msg.payload);
         render();
-      } else if (msg.type === "STATUS" && msg.counters) {
-        if (typeof msg.counters.detected   === "number") session.detected   = msg.counters.detected;
-        if (typeof msg.counters.queued     === "number") session.queued     = msg.counters.queued;
-        if (typeof msg.counters.unfollowed === "number") session.unfollowed = msg.counters.unfollowed;
-        if (typeof msg.counters.failed     === "number") session.failed     = msg.counters.failed;
-        if (typeof msg.counters.skipped    === "number") session.skipped    = msg.counters.skipped;
-        if (msg.counters.state)   session.state     = msg.counters.state;
-        if (msg.counters.updatedAt) session.updatedAt = msg.counters.updatedAt;
+      } else if (msg.type === "STATUS" && msg.session) {
+        mergeSessionData(msg.session);
+        render();
+      } else if (msg.type === "SESSION_UPDATED" && msg.session) {
+        mergeSessionData(msg.session);
+        render();
+      } else if (msg.type === "SESSION_RESET" && msg.session) {
+        mergeSessionData(msg.session);
+        render();
+      } else if (msg.type === "ACCOUNT_DISCOVERED" && typeof msg.count === "number") {
+        session.detected = msg.count;
+        render();
+      } else if (msg.type === "ACCOUNT_QUEUED" && typeof msg.count === "number") {
+        session.queued = msg.count;
+        render();
+      } else if (msg.type === "ACCOUNT_UNFOLLOWED" && typeof msg.count === "number") {
+        session.unfollowed = msg.count;
+        render();
+      } else if (msg.type === "ACCOUNT_FAILED" && typeof msg.count === "number") {
+        session.failed = msg.count;
+        render();
+      } else if (msg.type === "ACCOUNT_SKIPPED" && typeof msg.count === "number") {
+        session.skipped = msg.count;
+        render();
+      } else if (msg.type === "COMPLETED") {
+        session.state = "DONE";
+        render();
+      } else if (msg.type === "ERROR") {
+        session.state = "ERROR";
         render();
       }
     });

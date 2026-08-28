@@ -1,154 +1,288 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8">
-    <title>untwitt</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Untwitt</title>
     <link rel="stylesheet" href="popup.css">
   </head>
   <body>
-    <header class="hdr">
-      <div class="hdr-top">
-        <h1>untwitt</h1>
-        <span class="badge-pro">PRO</span>
+    <header class="app-hdr">
+      <div class="hdr-main">
+        <div class="brand-group">
+          <div class="brand-logo">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" fill="currentColor"/>
+            </svg>
+          </div>
+          <div class="brand-text">
+            <h1 class="brand-title">untwitt</h1>
+            <span class="brand-badge">PRO</span>
+          </div>
+        </div>
+        <div class="hdr-tagline">Tidy your X following list safely</div>
       </div>
-      <p class="tag">Next-gen smart unfollow utility for X.</p>
     </header>
 
-    <nav class="nav-tabs">
-      <button type="button" class="tab-btn active" data-tab="dashboard">Dashboard</button>
-      <button type="button" class="tab-btn" data-tab="whitelist">Whitelist</button>
-      <button type="button" class="tab-btn" data-tab="safety">Safety</button>
+    <!-- Segmented Navigation -->
+    <nav class="nav-segmented" role="tablist">
+      <button type="button" class="tab-btn active" data-tab="dashboard" role="tab" aria-selected="true">
+        Overview
+      </button>
+      <button type="button" class="tab-btn" data-tab="whitelist" role="tab" aria-selected="false">
+        Keep List
+      </button>
+      <button type="button" class="tab-btn" data-tab="safety" role="tab" aria-selected="false">
+        Safety
+      </button>
     </nav>
 
-    <!-- Tab 1: Dashboard -->
-    <main id="tab-dashboard" class="tab-content active">
-      <section class="status-card" id="status-card">
-        <div class="state" id="state-pill">IDLE</div>
+    <!-- TAB 1: OVERVIEW / DASHBOARD -->
+    <main id="tab-dashboard" class="tab-content active" role="tabpanel">
+      <!-- Hero Card -->
+      <section class="hero-card" id="status-card">
+        <div class="hero-header">
+          <span class="hero-eyebrow">SESSION METRICS</span>
+          <div class="state idle" id="state-pill">Ready</div>
+        </div>
+
         <div class="primary-counter">
           <div class="big" id="unfollowed-big">0</div>
-          <div class="lbl">UNFOLLOWED</div>
+          <div class="lbl">accounts unfollowed this session</div>
         </div>
+
+        <div class="progress-wrap">
+          <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+            <div class="bar" id="progress-bar"></div>
+          </div>
+        </div>
+
         <div class="secondary-line">
-          <span>Detected <strong id="detected">0</strong></span>
-          <span>Filter <strong id="filter-disp">Non-followers</strong></span>
-          <span>Speed <strong id="speed-disp">Normal</strong></span>
-          <span>Elapsed <strong id="elapsed">00:00</strong></span>
+          <div class="summary-chip">
+            <span class="chip-lbl">Found</span>
+            <strong id="detected">0</strong>
+          </div>
+          <div class="summary-chip">
+            <span class="chip-lbl">Filter</span>
+            <strong id="filter-disp">Non-followers</strong>
+          </div>
+          <div class="summary-chip">
+            <span class="chip-lbl">Pace</span>
+            <strong id="speed-disp">Gentle</strong>
+          </div>
+          <div class="summary-chip">
+            <span class="chip-lbl">Time</span>
+            <strong id="elapsed">00:00</strong>
+          </div>
         </div>
       </section>
 
+      <!-- Bento Counter Grid -->
       <section class="counters" id="counters">
-        <div><span class="lbl">Detected</span><span class="val" id="c-detected">0</span></div>
-        <div><span class="lbl">Queued</span><span class="val" id="c-queued">0</span></div>
-        <div><span class="lbl">Unfollowed</span><span class="val" id="c-unfollowed">0</span></div>
-        <div><span class="lbl">Failed</span><span class="val" id="c-failed">0</span></div>
-        <div><span class="lbl">Skipped</span><span class="val" id="c-skipped">0</span></div>
+        <div class="counter-tile">
+          <span class="lbl">Found</span>
+          <span class="val" id="c-detected">0</span>
+        </div>
+        <div class="counter-tile">
+          <span class="lbl">In Line</span>
+          <span class="val" id="c-queued">0</span>
+        </div>
+        <div class="counter-tile highlight-ok">
+          <span class="lbl">Unfollowed</span>
+          <span class="val" id="c-unfollowed">0</span>
+        </div>
+        <div class="counter-tile highlight-danger">
+          <span class="lbl">Failed</span>
+          <span class="val" id="c-failed">0</span>
+        </div>
+        <div class="counter-tile">
+          <span class="lbl">Skipped</span>
+          <span class="val" id="c-skipped">0</span>
+        </div>
       </section>
 
-      <div class="progress"><div class="bar" id="progress-bar"></div></div>
-
+      <!-- Action Controls -->
       <section class="controls">
-        <button class="primary" id="primary-btn">UNFOLLOW NON-FOLLOWERS</button>
-        <button class="secondary" id="stop-btn" disabled>STOP</button>
-        <button class="secondary hidden" id="pause-btn">PAUSE</button>
-        <button class="secondary hidden" id="resume-btn">RESUME</button>
-        <button class="tertiary" id="reset-btn">RESET SESSION</button>
+        <button type="button" class="btn-action primary" id="primary-btn">
+          Start Unfollowing
+        </button>
+        <div class="secondary-actions">
+          <button type="button" class="btn-action secondary" id="stop-btn" disabled>
+            Stop
+          </button>
+          <button type="button" class="btn-action secondary hidden" id="pause-btn">
+            Pause
+          </button>
+          <button type="button" class="btn-action secondary hidden" id="resume-btn">
+            Resume
+          </button>
+          <button type="button" class="btn-action tertiary" id="reset-btn">
+            Reset
+          </button>
+        </div>
       </section>
 
-      <section class="config">
-        <div class="row">
-          <label>Filter</label>
-          <select id="filter-sel">
-            <option value="non_followers" selected>Non-reciprocal (Doesn't follow back)</option>
-            <option value="all">All accounts</option>
-            <option value="mutuals_only">Mutuals only</option>
-          </select>
+      <!-- Automation Config Card -->
+      <section class="config-card">
+        <div class="config-heading">Target &amp; Automation Pace</div>
+
+        <div class="form-row">
+          <label class="form-label" for="filter-sel">Target Filter</label>
+          <div class="select-container">
+            <select id="filter-sel" class="custom-select">
+              <option value="non_followers" selected>People who don't follow back</option>
+              <option value="all">Everyone I follow</option>
+              <option value="mutuals_only">Mutual follows only</option>
+            </select>
+          </div>
         </div>
-        <div class="row">
-          <label>Mode</label>
-          <select id="mode-sel">
-            <option value="all" selected>All accounts</option>
-            <option value="batch">Batch</option>
-          </select>
-          <select id="batch-size-sel" class="hidden">
-            <option>10</option><option>25</option><option selected>50</option>
-            <option>100</option><option>250</option><option>500</option>
-          </select>
+
+        <div class="form-row">
+          <label class="form-label" for="mode-sel">Run Mode</label>
+          <div class="dual-select-row">
+            <div class="select-container flex-fill">
+              <select id="mode-sel" class="custom-select">
+                <option value="all" selected>All at once</option>
+                <option value="batch">In batches</option>
+              </select>
+            </div>
+            <div class="select-container batch-select-wrap">
+              <select id="batch-size-sel" class="custom-select hidden">
+                <option value="10">10 at a time</option>
+                <option value="25">25 at a time</option>
+                <option value="50" selected>50 at a time</option>
+                <option value="100">100 at a time</option>
+                <option value="250">250 at a time</option>
+                <option value="500">500 at a time</option>
+              </select>
+            </div>
+          </div>
         </div>
-        <div class="row">
-          <label>Speed</label>
-          <select id="speed-sel">
-            <option value="stealth" selected>Stealth (4.5s + Jitter - Safe)</option>
-            <option value="slow">Slow (5s)</option>
-            <option value="moderate">Moderate (2s)</option>
-            <option value="normal">Normal (1s)</option>
-            <option value="fast">Fast (500ms - Risky)</option>
-            <option value="custom">Custom</option>
-          </select>
-          <input type="number" id="custom-delay" min="100" max="60000" value="1500" class="hidden"> ms
+
+        <div class="form-row">
+          <label class="form-label" for="speed-sel">Pacing &amp; Speed</label>
+          <div class="speed-row">
+            <div class="select-container flex-fill">
+              <select id="speed-sel" class="custom-select">
+                <option value="stealth" selected>Gentle &amp; safe (about 4.5s)</option>
+                <option value="slow">Slow (5.0s)</option>
+                <option value="moderate">Moderate (2.0s)</option>
+                <option value="normal">Normal (1.0s)</option>
+                <option value="fast">Fast (0.5s)</option>
+                <option value="custom">Custom delay...</option>
+              </select>
+            </div>
+            <div class="custom-delay-group">
+              <input type="number" id="custom-delay" min="100" max="60000" value="1500" class="custom-input hidden" placeholder="ms">
+            </div>
+          </div>
         </div>
       </section>
     </main>
 
-    <!-- Tab 2: Whitelist -->
-    <section id="tab-whitelist" class="tab-content hidden">
+    <!-- TAB 2: KEEP LIST / WHITELIST -->
+    <section id="tab-whitelist" class="tab-content hidden" role="tabpanel">
       <div class="panel-box">
-        <h3>Protected Whitelist</h3>
-        <p class="panel-sub">Accounts in your whitelist will never be unfollowed.</p>
+        <div class="panel-header">
+          <h2 class="panel-title">Protected Accounts</h2>
+          <p class="panel-sub">Untwitt will strictly skip and never unfollow handles in this list.</p>
+        </div>
+
         <div class="input-row">
-          <input type="text" id="wl-input" placeholder="@handle to protect">
+          <div class="input-field-wrap">
+            <span class="input-prefix">@</span>
+            <input type="text" id="wl-input" class="custom-input handle-input" placeholder="username" spellcheck="false" autocomplete="off">
+          </div>
           <button type="button" class="btn-sm primary" id="wl-add-btn">Add</button>
         </div>
+
         <div class="wl-list-container">
           <ul id="wl-list" class="wl-list"></ul>
         </div>
-        <div class="btn-row">
-          <button type="button" class="btn-sm secondary" id="wl-export-btn">Export List</button>
-          <button type="button" class="btn-sm secondary" id="wl-clear-btn">Clear All</button>
+
+        <div class="panel-footer-actions">
+          <button type="button" class="btn-sm secondary" id="wl-export-btn">Save List (.csv)</button>
+          <button type="button" class="btn-sm secondary danger-btn" id="wl-clear-btn">Clear All</button>
         </div>
       </div>
     </section>
 
-    <!-- Tab 3: Safety & Audit -->
-    <section id="tab-safety" class="tab-content hidden">
+    <!-- TAB 3: SAFETY & AUDIT -->
+    <section id="tab-safety" class="tab-content hidden" role="tabpanel">
       <div class="panel-box">
-        <h3>Safety & Anti-Ban Protections</h3>
-        <div class="toggle-row">
-          <label class="switch-label">
-            <input type="checkbox" id="chk-protect-mutuals">
-            <span>Protect Mutuals (Never unfollow friends)</span>
-          </label>
+        <div class="panel-header">
+          <h2 class="panel-title">Protection Safeguards</h2>
+          <p class="panel-sub">Configure automatic protection rules to avoid rate limits and accidental unfollows.</p>
         </div>
-        <div class="toggle-row">
-          <label class="switch-label">
-            <input type="checkbox" id="chk-protect-verified">
-            <span>Protect Verified Accounts</span>
+
+        <div class="toggle-group">
+          <label class="toggle-row" for="chk-protect-mutuals">
+            <div class="toggle-copy">
+              <span class="toggle-label">Keep Mutual Followers</span>
+              <span class="toggle-hint">Never unfollow accounts that follow you back</span>
+            </div>
+            <div class="switch">
+              <input type="checkbox" id="chk-protect-mutuals">
+              <span class="slider"></span>
+            </div>
           </label>
-        </div>
-        <div class="toggle-row">
-          <label class="switch-label">
-            <input type="checkbox" id="chk-jitter" checked>
-            <span>Anti-Ban Jitter (Randomize Delays ±30%)</span>
+
+          <label class="toggle-row" for="chk-protect-verified">
+            <div class="toggle-copy">
+              <span class="toggle-label">Protect Verified Accounts</span>
+              <span class="toggle-hint">Skip accounts with Blue or Gold verification badges</span>
+            </div>
+            <div class="switch">
+              <input type="checkbox" id="chk-protect-verified">
+              <span class="slider"></span>
+            </div>
           </label>
-        </div>
-        <div class="toggle-row">
-          <label class="switch-label">
-            <input type="checkbox" id="chk-skip-default-avatars">
-            <span>Skip Default / Egg Avatars</span>
+
+          <label class="toggle-row" for="chk-jitter">
+            <div class="toggle-copy">
+              <span class="toggle-label">Human-like Timing Jitter</span>
+              <span class="toggle-hint">Randomize timing intervals to prevent bot detection</span>
+            </div>
+            <div class="switch">
+              <input type="checkbox" id="chk-jitter" checked>
+              <span class="slider"></span>
+            </div>
+          </label>
+
+          <label class="toggle-row" for="chk-skip-default-avatars">
+            <div class="toggle-copy">
+              <span class="toggle-label">Skip Default Avatars</span>
+              <span class="toggle-hint">Skip accounts that still use default avatar placeholders</span>
+            </div>
+            <div class="switch">
+              <input type="checkbox" id="chk-skip-default-avatars">
+              <span class="slider"></span>
+            </div>
           </label>
         </div>
 
-        <h3 class="section-title">Audit Log</h3>
-        <p class="panel-sub">Export full history of unfollowed & skipped accounts.</p>
-        <div class="btn-row">
-          <button type="button" class="btn-sm primary" id="export-audit-btn">Download Audit Log (CSV)</button>
+        <div class="panel-divider"></div>
+
+        <div class="panel-header">
+          <h2 class="panel-title">Activity Audit Log</h2>
+          <p class="panel-sub">Download a complete, timestamped history of all unfollow actions performed.</p>
+        </div>
+
+        <div class="audit-action-wrap">
+          <button type="button" class="btn-action secondary full-width" id="export-audit-btn">
+            Download Audit History (.csv)
+          </button>
         </div>
       </div>
     </section>
 
+    <!-- App Footer -->
     <footer class="ftr">
-      <span>v0.2.0</span>
-      <span class="dot" id="conn-dot">·</span>
-      <span id="conn-text">no active tab</span>
+      <div class="conn-status">
+        <span class="dot" id="conn-dot"></span>
+        <span class="conn-text" id="conn-text">Checking active tab...</span>
+      </div>
+      <div class="app-version">v0.2.0</div>
     </footer>
 
     <script src="popup.js"></script>
